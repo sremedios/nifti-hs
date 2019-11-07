@@ -1,2 +1,2 @@
 # nifti-hs
-Pure NIFTI transformations with Haskell
+This library will supply pure transformations and processing for the NIFTI file format.

@@ -1,3 +1,5 @@
+nifti-hs.cabal
+*~
 dist
 dist-*
 cabal-dev
