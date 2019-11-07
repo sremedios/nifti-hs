@@ -84,13 +84,13 @@ getNifti1HeaderLE = do
     magic <- getByteString 4 -- read exactly 4 bytes
     return $! Nifti1Header sizeof_hdr dim_info dim intent_p1 intent_p2 intent_p3 intent_code data_type bitpix slice_start pixdim vox_offset scl_slope scl_inter slice_end slice_code xyzt_units cal_max cal_min slice_duration toffset descrip aux_file qform_code sform_code quatern_b quatern_c quatern_d qoffset_x qoffset_y qoffset_z srow_x srow_y srow_z intent_name magic
 
-incrementalExample :: BL.ByteString -> [Trade]
+incrementalExample :: BL.ByteString -> [Nifti1Header]
 incrementalExample input0 = go decoder input0
   where
-    decoder = runGetIncremental getTrade
-    go :: Decoder Trade -> BL.ByteString -> [Trade]
-    go (Done leftover _consumed trade) input =
-      trade : go decoder (BL.chunk leftover input)
+    decoder = runGetIncremental getNifti1HeaderLE
+    go :: Decoder Nifti1Header -> BL.ByteString -> [Nifti1Header]
+    go (Done leftover _consumed hdr) input =
+      hdr: go decoder (BL.chunk leftover input)
     go (Partial k) input                     =
       go (k . takeHeadChunk $ input) (dropHeadChunk input)
     go (Fail _leftover _consumed msg) _input =
@@ -107,4 +107,3 @@ dropHeadChunk lbs =
   case lbs of
     (BL.Chunk _ lbs') -> lbs'
     _ -> BL.Empty
-
