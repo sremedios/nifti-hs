@@ -25,8 +25,8 @@ data Nifti1Header = Nifti1Header
     , cal_min           :: Float            -- Min display intensity
     , slice_duration    :: Float            -- Time for 1 slice
     , toffset           :: Float            -- Time axis shift
-    , descrip           :: String           -- Any text description, total size is 80 bytes
-    , aux_file          :: String           -- auxiliary filename, total size is 24 bytes
+    , descrip           :: Text             -- Any text description, total size is 80 bytes
+    , aux_file          :: Text             -- auxiliary filename, total size is 24 bytes
     , qform_code        :: Data.Word8       -- NIFTIXFORM code
     , sform_code        :: Data.Word8       -- NIFTIXFORM code
     , quatern_b         :: Float            -- Quaternion b param
@@ -38,8 +38,8 @@ data Nifti1Header = Nifti1Header
     , srow_x            :: Float            -- 1st row affine transform TODO: as array of floats
     , srow_y            :: Float            -- 2nd row affine transform TODO: as array of floats
     , srow_z            :: Float            -- 3rd row affine transform TODO: as array of floats
-    , intent_name       :: String           -- Name or meaning of data
-    , magic             :: String           -- MUST be "ni1\0" or "n+1\0"
+    , intent_name       :: Text           -- Name or meaning of data
+    , magic             :: Text           -- MUST be "ni1\0" or "n+1\0"
     }
 
 getNifti1HeaderLE :: Get Nifti1Header
@@ -82,7 +82,44 @@ getNifti1HeaderLE = do
     srow_z <- getFloatle
     intent_name <- getByteString 16 -- read exactly 16 bytes
     magic <- getByteString 4 -- read exactly 4 bytes
-    return $! Nifti1Header sizeof_hdr dim_info dim intent_p1 intent_p2 intent_p3 intent_code data_type bitpix slice_start pixdim vox_offset scl_slope scl_inter slice_end slice_code xyzt_units cal_max cal_min slice_duration toffset descrip aux_file qform_code sform_code quatern_b quatern_c quatern_d qoffset_x qoffset_y qoffset_z srow_x srow_y srow_z intent_name magic
+    return $! Nifti1Header
+      { sizeof_hdr = sizeof_hdr
+      , dim_info = dim_info
+      , dim = dim
+      , intent_p1 = intent_p1
+      , intent_p2 = intent_p2
+      , intent_p3 = intent_p3
+      , intent_code = intent_code
+      , data_type = data_type
+      , bitpix = bitpix
+      , slice_start = slice_start
+      , pixdim = pixdim
+      , vox_offset = vox_offset
+      , scl_slope = scl_slope
+      , scl_inter = scl_inter
+      , slice_end = slice_end
+      , slice_code = slice_code
+      , xyzt_units = xyzt_units
+      , cal_max = cal_max
+      , cal_min = cal_min
+      , slice_duration = slice_duration
+      , toffset = toffset
+      , descrip = descrip
+      , aux_file = aux_file
+      , qform_code = qform_code
+      , sform_code = sform_code
+      , quatern_b = quatern_b
+      , quatern_c = quatern_c
+      , quatern_d = quatern_d
+      , qoffset_x = qoffset_x
+      , qoffset_y = qoffset_y
+      , qoffset_z = qoffset_z
+      , srow_x = srow_x
+      , srow_y = srow_y
+      , srow_z = srow_z
+      , intent_name = intent_name
+      , magic = magic
+      }
 
 incrementalExample :: BL.ByteString -> [Nifti1Header]
 incrementalExample input0 = go decoder input0
