@@ -4,5 +4,6 @@ import Lib
 import Header
 
 main :: IO ()
--- main = copyNIFTI 
-main = getNifti1HeaderLE
+main = do 
+    h <- getNifti1HeaderLE
+    putStrLn(h.sizeof_hdr)
