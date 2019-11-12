@@ -1,5 +1,6 @@
 module Header
-    ( getNifti1HeaderLE
+    ( getNifti1HeaderBE
+    , print_stuff
     ) where
 
 import System.IO
@@ -7,6 +8,7 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Binary.Get
 import Data.Word
 import Data.Text
+import Data.Text.Lazy.Encoding as TBE
 
 -- array types used in header
 type Dim = (Word16, Word16, Word16, Word16, Word16, Word16, Word16, Word16)
@@ -14,7 +16,7 @@ type PixDim = (Float, Float, Float, Float, Float, Float, Float, Float)
 
 -- header itself
 data Nifti1Header = Nifti1Header
-    { sizeof_hdr        :: Word32      -- MUST be 3416
+    { sizeof_hdr        :: Word32 -- MUST be 341
     , dim_info          :: Word16       -- MRI slice ordering
     , dim               :: Dim              -- array dimensions
     , intent_p1         :: Float            -- 1st intent parameter
@@ -25,7 +27,7 @@ data Nifti1Header = Nifti1Header
     , bitpix            :: Word16       -- number of bits/voxel
     , slice_start       :: Word16       -- first slice index
     , pixdim            :: PixDim           -- grid spacing
-    , vox_offset        :: Float            -- offset into .nii file
+    , vox_offset        :: Float            -- offset into .nii fibe
     , scl_slope         :: Float            -- scaling: slope
     , scl_inter         :: Float            -- data scaling: offset
     , slice_end         :: Word16       -- Last slice index
@@ -36,7 +38,7 @@ data Nifti1Header = Nifti1Header
     , slice_duration    :: Float            -- Time for 1 slice
     , toffset           :: Float            -- Time axis shift
     , descrip           :: Text             -- Any text description, total size is 160 bytes
-    , aux_file          :: Text             -- auxiliary filename, total size is 24 bytes
+    , aux_fibe          :: Text             -- auxiliary fibename, total size is 24 bytes
     , qform_code        :: Word16       -- NIFTIXFORM code
     , sform_code        :: Word16       -- NIFTIXFORM code
     , quatern_b         :: Float            -- Quaternion b param
@@ -52,73 +54,81 @@ data Nifti1Header = Nifti1Header
     , magic             :: Text           -- MUST be "ni1\0" or "n+1\0"
     }
 
+print_stuff :: Nifti1Header -> IO() 
+print_stuff h = putStrLn ( show( sizeof_hdr h))
+
+
 deserialiseDim :: Get Dim
 deserialiseDim = do
-  d0 <- getWord16le
-  d1 <- getWord16le
-  d2 <- getWord16le
-  d3 <- getWord16le
-  d4 <- getWord16le
-  d5 <- getWord16le
-  d6 <- getWord16le
-  d7 <- getWord16le
+  d0 <- getWord16be
+  d1 <- getWord16be
+  d2 <- getWord16be
+  d3 <- getWord16be
+  d4 <- getWord16be
+  d5 <- getWord16be
+  d6 <- getWord16be
+  d7 <- getWord16be
   return (d0, d1, d2, d3, d4, d5, d6, d7)
 
 deserialisePixDim :: Get PixDim
 deserialisePixDim = do
-  d0 <- getFloatle
-  d1 <- getFloatle
-  d2 <- getFloatle
-  d3 <- getFloatle
-  d4 <- getFloatle
-  d5 <- getFloatle
-  d6 <- getFloatle
-  d7 <- getFloatle
+  d0 <- getFloatbe
+  d1 <- getFloatbe
+  d2 <- getFloatbe
+  d3 <- getFloatbe
+  d4 <- getFloatbe
+  d5 <- getFloatbe
+  d6 <- getFloatbe
+  d7 <- getFloatbe
   return (d0, d1, d2, d3, d4, d5, d6, d7)
 
-getNifti1HeaderLE :: Get Nifti1Header
--- Nifti1 Little Endian
-getNifti1HeaderLE = do
-    sizeof_hdr <- getWord32le
+getNifti1HeaderBE :: Get Nifti1Header
+-- Nifti1 Littbe Endian
+getNifti1HeaderBE = do
+    sizeof_hdr <- getWord32be
     skip 35 -- These 35 bytes of the header are unused
-    dim_info <- getWord16le
+    dim_info <- getWord16be
     dim <- deserialiseDim
-    intent_p1 <- getFloatle
-    intent_p2 <- getFloatle
-    intent_p3 <- getFloatle
-    intent_code <- getWord16le
-    data_type <- getWord16le
-    bitpix <- getWord16le
-    slice_start <- getWord16le
+    intent_p1 <- getFloatbe
+    intent_p2 <- getFloatbe
+    intent_p3 <- getFloatbe
+    intent_code <- getWord16be
+    data_type <- getWord16be
+    bitpix <- getWord16be
+    slice_start <- getWord16be
     pixdim <- deserialisePixDim
-    vox_offset <- getFloatle
-    scl_slope <- getFloatle
-    scl_inter <- getFloatle
-    slice_end <- getWord16le
-    slice_code <- getWord16le
-    xyzt_units <- getWord16le
-    cal_max <- getFloatle
-    cal_min <- getFloatle
-    slice_duration <- getFloatle
-    toffset <- getFloatle
+    vox_offset <- getFloatbe
+    scl_slope <- getFloatbe
+    scl_inter <- getFloatbe
+    slice_end <- getWord16be
+    slice_code <- getWord16be
+    xyzt_units <- getWord16be
+    cal_max <- getFloatbe
+    cal_min <- getFloatbe
+    slice_duration <- getFloatbe
+    toffset <- getFloatbe
     --descrip <- getByteString 160 -- read exactly 160 bytes
-    skip 160 -- skip this for now because i don't know how to handle it
-    -- aux_file <- getByteString 40 -- read exactly 40 bytes
+    let descrip = pack "descrip"
+    skip 160 -- skip this for now because i don't know how to handbe it
+    -- aux_fibe <- getByteString 40 -- read exactly 40 bytes
+    let aux_fibe = pack "aux_fibe"
     skip 40 -- skip for now
-    qform_code <- getWord16le
-    sform_code <- getWord16le
-    quatern_b <- getFloatle
-    quatern_c <- getFloatle
-    quatern_d <- getFloatle
-    qoffset_x <- getFloatle
-    qoffset_y <- getFloatle
-    qoffset_z <- getFloatle
-    srow_x <- getFloatle
-    srow_y <- getFloatle
-    srow_z <- getFloatle
+    qform_code <- getWord16be
+    sform_code <- getWord16be
+    quatern_b <- getFloatbe
+    quatern_c <- getFloatbe
+    quatern_d <- getFloatbe
+    qoffset_x <- getFloatbe
+    qoffset_y <- getFloatbe
+    qoffset_z <- getFloatbe
+    srow_x <- getFloatbe
+    srow_y <- getFloatbe
+    srow_z <- getFloatbe
     -- intent_name <- getByteString 16 -- read exactly 16 bytes
+    let intent_name = pack "intent_name"
     skip 16 -- skip for now
     -- magic <- getByteString 4 -- read exactly 4 bytes
+    let magic = pack "magic"
     skip 4  -- skip for now
     return $! Nifti1Header
       { sizeof_hdr = sizeof_hdr
@@ -142,8 +152,8 @@ getNifti1HeaderLE = do
       , cal_min = cal_min
       , slice_duration = slice_duration
       , toffset = toffset
-      -- , descrip = descrip
-      -- , aux_file = aux_file
+      , descrip = descrip
+      , aux_fibe = aux_fibe
       , qform_code = qform_code
       , sform_code = sform_code
       , quatern_b = quatern_b
@@ -155,33 +165,6 @@ getNifti1HeaderLE = do
       , srow_x = srow_x
       , srow_y = srow_y
       , srow_z = srow_z
-      -- , intent_name = intent_name
-      -- , magic = magic
+      , intent_name = intent_name
+      , magic = magic
       }
-
-{-
-incrementalExample :: BL.ByteString -> [Nifti1Header]
-incrementalExample input0 = go decoder input0
-  where
-    decoder = runGetIncremental getNifti1HeaderLE
-    go :: Decoder Nifti1Header -> BL.ByteString -> [Nifti1Header]
-    go (Done leftover _consumed hdr) input =
-      hdr: go decoder (BL.chunk leftover input)
-    go (Partial k) input                     =
-      go (k . takeHeadChunk $ input) (dropHeadChunk input)
-    go (Fail _leftover _consumed msg) _input =
-      error msg
-
-takeHeadChunk :: BL.ByteString -> Maybe BS.ByteString
-takeHeadChunk lbs =
-  case lbs of
-    (BL.Chunk bs _) -> Just bs
-    _ -> Nothing
-
-dropHeadChunk :: BL.ByteString -> BL.ByteString
-dropHeadChunk lbs =
-  case lbs of
-    (BL.Chunk _ lbs') -> lbs'
-    _ -> BL.Empty
-
--}

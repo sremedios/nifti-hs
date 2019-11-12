@@ -3,16 +3,6 @@ module Lib
     ) where
 
 import System.IO
-import qualified Data.ByteString.Lazy as BL
-import Data.Binary.Get
-import Data.Word
-
-deserialiseHeader :: Get (Word32, Word32, Word32)
-deserialiseHeader = do
-  alen <- getWord32be
-  plen <- getWord32be
-  chksum <- getWord32be
-  return (alen, plen, chksum)
 
 getHandles :: IO (Handle, Handle)
 getHandles = do
