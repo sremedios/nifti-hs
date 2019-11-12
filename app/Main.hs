@@ -1,6 +1,8 @@
 module Main where
 
 import Lib
+import Header
 
 main :: IO ()
-main = copyNIFTI 
+-- main = copyNIFTI 
+main = getNifti1HeaderLE

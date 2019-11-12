@@ -1,34 +1,44 @@
+module Header
+    ( getNifti1HeaderLE
+    ) where
+
+import System.IO
+import qualified Data.ByteString.Lazy as BL
+import Data.Binary.Get
+import Data.Word
+import Data.Text
+
 -- array types used in header
-type Dim = (Data.Word8, Data.Word8, Data.Word8, Data.Word8, Data.Word8, Data.Word8, Data.Word8, Data.Word8,)
-type PixDim = (Float, Float, Float, Float, Float, Float, Float, Float,)
+type Dim = (Word8, Word8, Word8, Word8, Word8, Word8, Word8, Word8)
+type PixDim = (Float, Float, Float, Float, Float, Float, Float, Float)
 
 -- header itself
 data Nifti1Header = Nifti1Header
-    { sizeof_hdr        :: Data.Word32      -- MUST be 348
-    , dim_info          :: Data.Word8       -- MRI slice ordering
-    , dim               :: Dim              -- Data array dimensions
+    { sizeof_hdr        :: Word32      -- MUST be 348
+    , dim_info          :: Word8       -- MRI slice ordering
+    , dim               :: Dim              -- array dimensions
     , intent_p1         :: Float            -- 1st intent parameter
     , intent_p2         :: Float            -- 2nd intent parameter
     , intent_p3         :: Float            -- 3rd intent parameter
-    , intent_code       :: Data.Word8       -- NIFTIINTENT code
-    , data_type         :: Data.Word8       -- Defines data type 
-    , bitpix            :: Data.Word8       -- number of bits/voxel
-    , slice_start       :: Data.Word8       -- first slice index
+    , intent_code       :: Word8       -- NIFTIINTENT code
+    , data_type         :: Word8       -- Defines data type 
+    , bitpix            :: Word8       -- number of bits/voxel
+    , slice_start       :: Word8       -- first slice index
     , pixdim            :: PixDim           -- grid spacing
     , vox_offset        :: Float            -- offset into .nii file
-    , scl_slope         :: Float            -- Data scaling: slope
+    , scl_slope         :: Float            -- scaling: slope
     , scl_inter         :: Float            -- data scaling: offset
-    , slice_end         :: Data.Word8       -- Last slice index
-    , slice_code        :: Data.Word8       -- Slice timing order
-    , xyzt_units        :: Data.Word8       -- Units of pixdim[1..4]
+    , slice_end         :: Word8       -- Last slice index
+    , slice_code        :: Word8       -- Slice timing order
+    , xyzt_units        :: Word8       -- Units of pixdim[1..4]
     , cal_max           :: Float            -- Max display intensity
     , cal_min           :: Float            -- Min display intensity
     , slice_duration    :: Float            -- Time for 1 slice
     , toffset           :: Float            -- Time axis shift
-    , descrip           :: Text             -- Any text description, total size is 80 bytes
-    , aux_file          :: Text             -- auxiliary filename, total size is 24 bytes
-    , qform_code        :: Data.Word8       -- NIFTIXFORM code
-    , sform_code        :: Data.Word8       -- NIFTIXFORM code
+    , descrip           :: String             -- Any text description, total size is 80 bytes
+    , aux_file          :: String             -- auxiliary filename, total size is 24 bytes
+    , qform_code        :: Word8       -- NIFTIXFORM code
+    , sform_code        :: Word8       -- NIFTIXFORM code
     , quatern_b         :: Float            -- Quaternion b param
     , quatern_c         :: Float            -- Quaternion c param
     , quatern_d         :: Float            -- Quaternion d param
@@ -38,8 +48,8 @@ data Nifti1Header = Nifti1Header
     , srow_x            :: Float            -- 1st row affine transform TODO: as array of floats
     , srow_y            :: Float            -- 2nd row affine transform TODO: as array of floats
     , srow_z            :: Float            -- 3rd row affine transform TODO: as array of floats
-    , intent_name       :: Text           -- Name or meaning of data
-    , magic             :: Text           -- MUST be "ni1\0" or "n+1\0"
+    , intent_name       :: String           -- Name or meaning of data
+    , magic             :: String           -- MUST be "ni1\0" or "n+1\0"
     }
 
 getNifti1HeaderLE :: Get Nifti1Header
@@ -47,30 +57,30 @@ getNifti1HeaderLE :: Get Nifti1Header
 getNifti1HeaderLE = do
     sizeof_hdr <- getWord32le
     skip 35 -- These 35 bytes of the header are unused
-    dim_info <- getWord8le
+    dim_info <- getWord16le
     dim <- getWord16le
     intent_p1 <- getFloatle
     intent_p2 <- getFloatle
     intent_p3 <- getFloatle
-    intent_code <- getWord8le
-    data_type <- getWord8le
-    bitpix <- getWord8le
-    slice_start <- getWord8le
+    intent_code <- getWord16le
+    data_type <- getWord16le
+    bitpix <- getWord16le
+    slice_start <- getWord16le
     pixdim <- getFloatle
     vox_offset <- getFloatle
     scl_slope <- getFloatle
     scl_inter <- getFloatle
-    slice_end <- getWord8le
-    slice_code <- getWord8le
-    xyzt_units <- getWord8le
+    slice_end <- getWord16le
+    slice_code <- getWord16le
+    xyzt_units <- getWord16le
     cal_max <- getFloatle
     cal_min <- getFloatle
     slice_duration <- getFloatle
     toffset <- getFloatle
-    descrip <- getByteString 80 -- read exactly 80 bytes
+    descrip <- getByteString 160 -- read exactly 160 bytes
     aux_file <- getByteString 40 -- read exactly 40 bytes
-    qform_code <- getWord8le
-    sform_code <- getWord8le
+    qform_code <- getWord16le
+    sform_code <- getWord16le
     quatern_b <- getFloatle
     quatern_c <- getFloatle
     quatern_d <- getFloatle
@@ -121,6 +131,7 @@ getNifti1HeaderLE = do
       , magic = magic
       }
 
+{-
 incrementalExample :: BL.ByteString -> [Nifti1Header]
 incrementalExample input0 = go decoder input0
   where
@@ -144,3 +155,5 @@ dropHeadChunk lbs =
   case lbs of
     (BL.Chunk _ lbs') -> lbs'
     _ -> BL.Empty
+
+-}
