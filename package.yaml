@@ -37,6 +37,7 @@ default-extensions:
   - RankNTypes
   - ConstraintKinds
   - TypeApplications
+  - ScopedTypeVariables
 
 library:
   source-dirs: src

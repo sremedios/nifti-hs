@@ -88,8 +88,14 @@ getDim e = do
   case isDimSize lengthProxy of
     Nothing -> fail "Invalid length"
     Just (DimSizeWitness Refl Refl)-> do
-      vec <- replicateM' lengthProxy E.getWord8
+      vec <- replicateM' lengthProxy $ E.getWord8 e
       return $ SomeSize $ Dim vec
+
+getPixDim :: (KnownNat n, DimSize n) => Proxy n -> E.Endianness -> Get (PixDim n)
+getPixDim p e = do
+  let length = natVal p + 1
+  vec <- replicateM' length $ E.getFloat e
+  return vec
 
 determineNifti1HeaderEndianness :: Get E.Endianness
 determineNifti1HeaderEndianness = do
@@ -97,13 +103,13 @@ determineNifti1HeaderEndianness = do
   if isLittle
     then return E.Little
     else do
-    isBig <- lookAhead $ E.getInt32 E.Big
-    if isBig
-      then return E.Big
-      else fail "sizeof_hdr field invalid"
+      isBig <- isEndianness E.Big
+      if isBig
+        then return E.Big
+        else fail "sizeof_hdr field invalid"
   where
     isEndianness :: E.Endianness -> Get Bool
-    asEndianness e = lookAhead $ do
+    isEndianness e = lookAhead $ do
       size <- E.getInt32 e
       return $ size == 348
 
@@ -114,60 +120,92 @@ getNifti1HeaderE e = do
 
   skip 35 -- These 35 bytes of the header are unused
 
-  Nifti1Header
-    sizeof_hdr
-    <$> E.getWord8 e
-    <*> getDim e
-    <*> E.getFloat e -- intent_p1
-    <*> E.getFloat e -- intent_p2
-    <*> E.getFloat e -- intent_p3
-    <*> E.getWord8 e -- intent_code
-    <*> E.getWord8 e -- 
+  dim_info <- E.getWord16 e
+  SomeSize (dim :: Dim n) <- getDim e
+  intent_p1 <- E.getFloat e
+  intent_p2 <- E.getFloat e
+  intent_p3 <- E.getFloat e
+  intent_code <- E.getWord16 e
+  data_type <- E.getWord16 e
+  bitpix <- E.getWord16 e
+  slice_start <- E.getWord16 e
+  pixdim <- getPixDim (Proxy @ n) e
+  vox_offset <- E.getFloat e
+  scl_slope <- E.getFloat e
+  scl_inter <- E.getFloat e
+  slice_end <- E.getFloat e
+  slice_code <- E.getWord16 e
+  xyzt_units <- E.getWord16 e
+  cal_max <- E.getFloat e
+  cal_min <- E.getFloat e
+  slice_duration <- E.getFloat e
+  toffset <- E.getFloat e
+  --descrip <- getByteString 160 -- read exactly 160 bytes
+  let descrip = pack "descrip"
+  skip 160 -- skip this for now because i don't know how to handbe it
+  -- aux_file <- getByteString 40 -- read exactly 40 bytes
+  let aux_file = pack "aux_file"
+  skip 40 -- skip for now
+  qform_code <- E.getWord16 e
+  sform_code <- E.getWord16 e
+  quatern_b <- E.getFloat e
+  quatern_c <- E.getFloat e
+  quatern_d <- E.getFloat e
+  qoffset_x <- E.getFloat e
+  qoffset_y <- E.getFloat e
+  qoffset_z <- E.getFloat e
+  srow_x <- E.getFloat e
+  srow_y <- E.getFloat e
+  srow_z <- E.getFloat e
+  -- intent_name <- getByteString 16 -- read exactly 16 bytes
+  let intent_name = pack "intent_name"
+  skip 16 -- skip for now
+  -- magic <- getByteString 4 -- read exactly 4 bytes
+  let magic = pack "magic"
+  skip 4  -- skip for now
+  return $! Nifti1Header
+    { sizeof_hdr = sizeof_hdr
+    , dim_info = dim_info
+    , dim = dim
+    , intent_p1 = intent_p1
+    , intent_p2 = intent_p2
+    , intent_p3 = intent_p3
+    , intent_code = intent_code
+    , data_type = data_type
+    , bitpix = bitpix
+    , slice_start = slice_start
+    , pixdim = pixdim
+    , vox_offset = vox_offset
+    , scl_slope = scl_slope
+    , scl_inter = scl_inter
+    , slice_end = slice_end
+    , slice_code = slice_code
+    , xyzt_units = xyzt_units
+    , cal_max = cal_max
+    , cal_min = cal_min
+    , slice_duration = slice_duration
+    , toffset = toffset
+    , descrip = descrip
+    , aux_file = aux_file
+    , qform_code = qform_code
+    , sform_code = sform_code
+    , quatern_b = quatern_b
+    , quatern_c = quatern_c
+    , quatern_d = quatern_d
+    , qoffset_x = qoffset_x
+    , qoffset_y = qoffset_y
+    , qoffset_z = qoffset_z
+    , srow_x = srow_x
+    , srow_y = srow_y
+    , srow_z = srow_z
+    , intent_name = intent_name
+    , magic = magic
+    }
 
 getNifti1Header :: Get SomeNifti1Header
--- Nifti1 Little Endian
 getNifti1Header =
   determineNifti1HeaderEndianness >>= getNifti1HeaderE
 
-
-  Nifiti1Header size
-    dim_info <- getWord8
-    dim <- getWord16le
-    intent_p1 <- getFloatle
-    intent_p2 <- getFloatle
-    intent_p3 <- getFloatle
-    intent_code <- getWord8
-    data_type <- getWord8
-    bitpix <- getWord8
-    slice_start <- getWord8
-    pixdim <- getFloatle
-    vox_offset <- getFloatle
-    scl_slope <- getFloatle
-    scl_inter <- getFloatle
-    slice_end <- getWord8
-    slice_code <- getWord8
-    xyzt_units <- getWord8
-    cal_max <- getFloatle
-    cal_min <- getFloatle
-    slice_duration <- getFloatle
-    toffset <- getFloatle
-    descrip <- getByteString 80 -- read exactly 80 bytes
-    aux_file <- getByteString 40 -- read exactly 40 bytes
-    qform_code <- getWord8
-    sform_code <- getWord8
-    quatern_b <- getFloatle
-    quatern_c <- getFloatle
-    quatern_d <- getFloatle
-    qoffset_x <- getFloatle
-    qoffset_y <- getFloatle
-    qoffset_z <- getFloatle
-    srow_x <- getFloatle
-    srow_y <- getFloatle
-    srow_z <- getFloatle
-    intent_name <- getByteString 16 -- read exactly 16 bytes
-    magic <- getByteString 4 -- read exactly 4 bytes
-    return $! Nifti1Header sizeof_hdr dim_info dim intent_p1 intent_p2 intent_p3 intent_code data_type bitpix slice_start pixdim vox_offset scl_slope scl_inter slice_end slice_code xyzt_units cal_max cal_min slice_duration toffset descrip aux_file qform_code sform_code quatern_b quatern_c quatern_d qoffset_x qoffset_y qoffset_z srow_x srow_y srow_z intent_name magic
-
-decodeNifti1Header :: (n <= 8) => BL.ByteString -> (BL.ByteString, Nifti1Header n)
+decodeNifti1Header :: (DimSize n) => BL.ByteString -> (BL.ByteString, Nifti1Header n)
 decodeNifti1Header bs = (unconsumed, hdr)
   where (unconsumed, _, hdr) = runGetOrFail getNifti1HeaderLE bs
