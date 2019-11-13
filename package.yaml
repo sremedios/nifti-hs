@@ -23,6 +23,20 @@ dependencies:
 - base >= 4.7 && < 5
 - binary              # used in parsing
 - bytestring          # used in parsing
+- vector-sized
+- finite-typelits
+- text
+- typelits-witnesses
+
+default-extensions:
+  - DataKinds
+  - PolyKinds
+  - KindSignatures
+  - TypeOperators
+  - GADTs
+  - RankNTypes
+  - ConstraintKinds
+  - TypeApplications
 
 library:
   source-dirs: src
