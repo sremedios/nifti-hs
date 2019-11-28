@@ -6,28 +6,28 @@ import Data.Word
 import Data.Proxy
 import Data.Type.Equality
 import Control.Monad (when)
-import Data.String (fromString)
+import Control.Monad.Fail (MonadFail)
 
 import GHC.TypeLits.Compare
-import GHC.TypeLits.Witnesses
 import Data.Bifunctor
 import Conversion
-import Data.Binary.Get (Get, skip, lookAhead, runGetOrFail)
+import Data.Binary.Get (Get, skip, lookAhead, runGetOrFail, getByteString)
 import Data.Vector.Unboxed.Sized (Vector)
 import qualified Data.Vector.Unboxed.Sized as V
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
+import Data.Text.Encoding (decodeLatin1)
 
 import qualified Endianness as E
 
 type DimSize (n::Nat) = (KnownNat n, 1 <= n, n <= 7)
 
 data DimSizeWitness (n::Nat) where
-  DimSizeWitness :: (KnownNat n) => ((1 <=? n) :~: 'True) -> ((n <=? 7) :~: 'True) -> DimSizeWitness n
+  DimSizeWitness :: (DimSize n) => DimSizeWitness n
 
 isDimSize :: (KnownNat n) => Proxy n -> Maybe (DimSizeWitness n)
 isDimSize p = case (isLE p1 p, isLE p p7) of
-                (Just Refl, Just Refl) -> Just $ DimSizeWitness Refl Refl
+                (Just Refl, Just Refl) -> Just DimSizeWitness
                 _ -> Nothing
   where p1 = Proxy @ 1
         p7 = Proxy @ 7
@@ -86,25 +86,20 @@ data Nifti1Header (n::Nat) = DimSize n => Nifti1Header
 
 type SomeNifti1Header = SomeSize Nifti1Header
 
-snatToProxy :: SNat n -> Proxy n
-snatToProxy SNat = Proxy
-
-isSomeNatDimSize :: SomeNat -> Maybe (SomeSize DimSizeWitness)
-isSomeNatDimSize (SomeNat p) = f <$> isDimSize p
-  where
-    f :: DimSizeWitness n -> SomeSize DimSizeWitness
-    f wit@(DimSizeWitness Refl Refl) = SomeSize wit
+unwrap :: MonadFail m => String -> Maybe a -> m a
+unwrap _ (Just v) = return v
+unwrap err Nothing = fail err
 
 getDim :: Get SomeDim
 getDim = do
   length <- E.getWord8
   let maybeSomeLength = someNatVal $ convert length
 
-  case isSomeNatDimSize =<< maybeSomeLength of
-    Nothing -> fail "Invalid length"
-    Just (SomeSize (_ :: DimSizeWitness n))-> do
-      vec <- V.replicateM' (Proxy @ n) E.getWord8
-      return $ SomeSize $ Dim vec
+  SomeNat (p :: Proxy m) <- unwrap "invalid length" maybeSomeLength
+  DimSizeWitness <- unwrap "invalid length" $ isDimSize p
+
+  vec <- V.replicateM' (Proxy @ m) E.getWord8
+  return $ SomeSize $ Dim vec
 
 getPixDim :: (KnownNat n, DimSize n) => Proxy n -> E.Endianness -> Get (PixDim n)
 getPixDim lengthP e = do
@@ -154,12 +149,8 @@ getNifti1HeaderE e = do
   cal_min <- E.getFloat e
   slice_duration <- E.getFloat e
   toffset <- E.getFloat e
-  --descrip <- getByteString 160 -- read exactly 160 bytes
-  let descrip = fromString "descrip"
-  skip 160 -- skip this for now because i don't know how to handbe it
-  -- aux_file <- getByteString 40 -- read exactly 40 bytes
-  let aux_file = fromString "aux_file"
-  skip 40 -- skip for now
+  descrip <- getText 160 -- read exactly 160 bytes
+  aux_file <- getText 40 -- read exactly 40 bytes
   qform_code <- E.getWord16 e
   sform_code <- E.getWord16 e
   quatern_b <- E.getFloat e
@@ -171,12 +162,8 @@ getNifti1HeaderE e = do
   srow_x <- E.getFloat e
   srow_y <- E.getFloat e
   srow_z <- E.getFloat e
-  -- intent_name <- getByteString 16 -- read exactly 16 bytes
-  let intent_name = fromString "intent_name"
-  skip 16 -- skip for now
-  -- magic <- getByteString 4 -- read exactly 4 bytes
-  let magic = fromString "magic"
-  skip 4  -- skip for now
+  intent_name <- getText 16 -- read exactly 16 bytes
+  magic <- getText 4 -- read exactly 4 bytes
   return . SomeSize $! Nifti1Header
     { sizeof_hdr = sizeof_hdr
     , dim_info = dim_info
@@ -215,6 +202,9 @@ getNifti1HeaderE e = do
     , intent_name = intent_name
     , magic = magic
     }
+  where
+    getText :: Int -> Get T.Text
+    getText = fmap decodeLatin1 . getByteString
 
 getNifti1Header :: Get SomeNifti1Header
 getNifti1Header =
