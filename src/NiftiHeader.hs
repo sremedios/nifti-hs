@@ -6,26 +6,31 @@ import Data.Word
 import Data.Proxy
 import Data.Type.Equality
 import Control.Monad (when)
+import Data.String (fromString)
 
 import GHC.TypeLits.Compare
-import Data.Vector.Unboxed.Sized
-import Data.Binary.Get (Get)
+import GHC.TypeLits.Witnesses
+import Data.Bifunctor
+import Conversion
+import Data.Binary.Get (Get, skip, lookAhead, runGetOrFail)
+import Data.Vector.Unboxed.Sized (Vector)
+import qualified Data.Vector.Unboxed.Sized as V
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 
 import qualified Endianness as E
 
-type DimSize (n::Nat) = (1 <= n, n <= 7)
+type DimSize (n::Nat) = (KnownNat n, 1 <= n, n <= 7)
 
 data DimSizeWitness (n::Nat) where
-  DimSizeWitness :: ((1 <=? n) :~: True) -> ((n <=? 7) :~: True) -> DimSizeWitness n
+  DimSizeWitness :: (KnownNat n) => ((1 <=? n) :~: 'True) -> ((n <=? 7) :~: 'True) -> DimSizeWitness n
 
 isDimSize :: (KnownNat n) => Proxy n -> Maybe (DimSizeWitness n)
 isDimSize p = case (isLE p1 p, isLE p p7) of
                 (Just Refl, Just Refl) -> Just $ DimSizeWitness Refl Refl
                 _ -> Nothing
-  where p1 = (Proxy :: Proxy 1)
-        p7 = (Proxy :: Proxy 7)
+  where p1 = Proxy @ 1
+        p7 = Proxy @ 7
 
 data SomeSize (t :: Nat -> Type) where
   SomeSize :: (DimSize n) => t n -> SomeSize t
@@ -55,7 +60,7 @@ data Nifti1Header (n::Nat) = DimSize n => Nifti1Header
     , vox_offset        :: Float            -- offset into .nii file
     , scl_slope         :: Float            -- Data scaling: slope
     , scl_inter         :: Float            -- data scaling: offset
-    , slice_end         :: Word8       -- Last slice index
+    , slice_end         :: Word16      -- Last slice index
     , slice_code        :: Word8       -- Slice timing order
     , xyzt_units        :: Word8       -- Units of pixdim[1..4]
     , cal_max           :: Float            -- Max display intensity
@@ -64,8 +69,8 @@ data Nifti1Header (n::Nat) = DimSize n => Nifti1Header
     , toffset           :: Float            -- Time axis shift
     , descrip           :: T.Text           -- Any text description, total size is 80 bytes
     , aux_file          :: T.Text           -- auxiliary filename, total size is 24 bytes
-    , qform_code        :: Word8       -- NIFTIXFORM code
-    , sform_code        :: Word8       -- NIFTIXFORM code
+    , qform_code        :: Word16      -- NIFTIXFORM code
+    , sform_code        :: Word16      -- NIFTIXFORM code
     , quatern_b         :: Float            -- Quaternion b param
     , quatern_c         :: Float            -- Quaternion c param
     , quatern_d         :: Float            -- Quaternion d param
@@ -81,21 +86,30 @@ data Nifti1Header (n::Nat) = DimSize n => Nifti1Header
 
 type SomeNifti1Header = SomeSize Nifti1Header
 
-getDim :: E.Endianness -> Get SomeDim
-getDim e = do
+snatToProxy :: SNat n -> Proxy n
+snatToProxy SNat = Proxy
+
+isSomeNatDimSize :: SomeNat -> Maybe (SomeSize DimSizeWitness)
+isSomeNatDimSize (SomeNat p) = f <$> isDimSize p
+  where
+    f :: DimSizeWitness n -> SomeSize DimSizeWitness
+    f wit@(DimSizeWitness Refl Refl) = SomeSize wit
+
+getDim :: Get SomeDim
+getDim = do
   length <- E.getWord8
-  Just (SomeNat lengthProxy) <- someNatVal length
-  case isDimSize lengthProxy of
+  let maybeSomeLength = someNatVal $ convert length
+
+  case isSomeNatDimSize =<< maybeSomeLength of
     Nothing -> fail "Invalid length"
-    Just (DimSizeWitness Refl Refl)-> do
-      vec <- replicateM' lengthProxy $ E.getWord8 e
+    Just (SomeSize (_ :: DimSizeWitness n))-> do
+      vec <- V.replicateM' (Proxy @ n) E.getWord8
       return $ SomeSize $ Dim vec
 
 getPixDim :: (KnownNat n, DimSize n) => Proxy n -> E.Endianness -> Get (PixDim n)
-getPixDim p e = do
-  let length = natVal p + 1
-  vec <- replicateM' length $ E.getFloat e
-  return vec
+getPixDim lengthP e = do
+  vec <- V.replicateM' lengthP $ E.getFloat e
+  return $ PixDim vec
 
 determineNifti1HeaderEndianness :: Get E.Endianness
 determineNifti1HeaderEndianness = do
@@ -115,36 +129,36 @@ determineNifti1HeaderEndianness = do
 
 getNifti1HeaderE :: E.Endianness -> Get SomeNifti1Header
 getNifti1HeaderE e = do
-  sizeof_hdr <- E.getWord32 endianness
+  sizeof_hdr <- E.getWord32 e
   when (sizeof_hdr /= 348) $ fail "Invalid sizeof_hdr"
 
   skip 35 -- These 35 bytes of the header are unused
 
-  dim_info <- E.getWord16 e
-  SomeSize (dim :: Dim n) <- getDim e
+  dim_info <- E.getWord8
+  SomeSize (dim :: Dim n) <- getDim
   intent_p1 <- E.getFloat e
   intent_p2 <- E.getFloat e
   intent_p3 <- E.getFloat e
-  intent_code <- E.getWord16 e
-  data_type <- E.getWord16 e
-  bitpix <- E.getWord16 e
-  slice_start <- E.getWord16 e
+  intent_code <- E.getWord8
+  data_type <- E.getWord8
+  bitpix <- E.getWord8
+  slice_start <- E.getWord8
   pixdim <- getPixDim (Proxy @ n) e
   vox_offset <- E.getFloat e
   scl_slope <- E.getFloat e
   scl_inter <- E.getFloat e
-  slice_end <- E.getFloat e
-  slice_code <- E.getWord16 e
-  xyzt_units <- E.getWord16 e
+  slice_end <- E.getWord16 e
+  slice_code <- E.getWord8
+  xyzt_units <- E.getWord8
   cal_max <- E.getFloat e
   cal_min <- E.getFloat e
   slice_duration <- E.getFloat e
   toffset <- E.getFloat e
   --descrip <- getByteString 160 -- read exactly 160 bytes
-  let descrip = pack "descrip"
+  let descrip = fromString "descrip"
   skip 160 -- skip this for now because i don't know how to handbe it
   -- aux_file <- getByteString 40 -- read exactly 40 bytes
-  let aux_file = pack "aux_file"
+  let aux_file = fromString "aux_file"
   skip 40 -- skip for now
   qform_code <- E.getWord16 e
   sform_code <- E.getWord16 e
@@ -158,12 +172,12 @@ getNifti1HeaderE e = do
   srow_y <- E.getFloat e
   srow_z <- E.getFloat e
   -- intent_name <- getByteString 16 -- read exactly 16 bytes
-  let intent_name = pack "intent_name"
+  let intent_name = fromString "intent_name"
   skip 16 -- skip for now
   -- magic <- getByteString 4 -- read exactly 4 bytes
-  let magic = pack "magic"
+  let magic = fromString "magic"
   skip 4  -- skip for now
-  return $! Nifti1Header
+  return . SomeSize $! Nifti1Header
     { sizeof_hdr = sizeof_hdr
     , dim_info = dim_info
     , dim = dim
@@ -206,6 +220,8 @@ getNifti1Header :: Get SomeNifti1Header
 getNifti1Header =
   determineNifti1HeaderEndianness >>= getNifti1HeaderE
 
-decodeNifti1Header :: (DimSize n) => BL.ByteString -> (BL.ByteString, Nifti1Header n)
-decodeNifti1Header bs = (unconsumed, hdr)
-  where (unconsumed, _, hdr) = runGetOrFail getNifti1HeaderLE bs
+decodeNifti1Header :: BL.ByteString -> Either String (BL.ByteString, SomeNifti1Header)
+decodeNifti1Header bs = first f $ do
+  (unconsumed, _, hdr) <- runGetOrFail getNifti1Header bs
+  return (unconsumed, hdr)
+  where f (_,_,s) = s
